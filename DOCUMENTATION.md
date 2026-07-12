@@ -191,6 +191,7 @@ HTTPS Load Balancer + Cloud Armor + IAP (user/group IAM)
 │   └── README.md
 ├── Dockerfile                   # Single image for both API and worker
 ├── pyproject.toml               # Package metadata and dependencies
+├── requirements.txt             # Runtime dependencies (mirrors pyproject.toml)
 ├── .env.example                 # Annotated configuration template
 ├── README.md                    # Condensed overview
 └── WORKFLOW_DIAGRAM.md          # Full Mermaid flow + state diagrams

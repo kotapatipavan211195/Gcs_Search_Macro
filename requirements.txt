@@ -1,0 +1,14 @@
+# Runtime dependencies (mirrors [project.dependencies] in pyproject.toml).
+# For an editable install with development tooling, use: pip install -e '.[dev]'
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.8,<3
+pydantic-settings>=2.4,<3
+google-auth>=2.0
+google-cloud-firestore>=2.16
+google-cloud-bigquery>=3.0
+google-cloud-storage>=2.0
+google-cloud-tasks>=2.16
+pandas>=2.2,<4
+openpyxl>=3.1,<4
+db-dtypes>=1.2,<2
