@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GCS Search Macro</title>
+    <style>
+      :root { color-scheme: light; font-family: Arial, sans-serif; color: #172033; background: #f5f7fb; }
+      main { max-width: 760px; margin: 2rem auto; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 3px 14px #1720331c; }
+      h1 { margin-top: 0; } label { display: block; font-weight: 600; margin-top: 1rem; }
+      input, select, textarea, button { box-sizing: border-box; font: inherit; width: 100%; padding: .65rem; margin-top: .35rem; }
+      textarea { min-height: 8rem; } button { background: #1455a3; color: white; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 1.25rem; }
+      button:disabled { opacity: .55; cursor: wait; } .option { display: flex; gap: .5rem; align-items: center; margin-top: .75rem; }
+      .option input { width: auto; margin: 0; } #result { display: none; margin-top: 1.25rem; padding: 1rem; border-radius: 6px; background: #edf3ff; }
+      #error { color: #a61b1b; white-space: pre-wrap; } .muted { color: #536176; font-size: .9rem; }
+      .bucket-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: .6rem; align-items: end; margin-top: .6rem; }
+      .bucket-row label { margin: 0; } .bucket-row button, .secondary { width: auto; margin: 0; background: #e6eaf0; color: #172033; }
+      .secondary { margin-top: .75rem; } @media (max-width: 600px) { .bucket-row { grid-template-columns: 1fr; } .bucket-row button { width: 100%; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>GCS Search Macro</h1>
+      <p class="muted" id="identity">Checking your corporate identity…</p>
+      <form id="search-form">
+        <label for="scope">Access profile</label>
+        <select id="scope" required></select>
+
+        <label for="search-type">What do you want to search for?</label>
+        <select id="search-type" required>
+          <option value="content">A term inside files</option>
+          <option value="filename">A file name in GCS</option>
+        </select>
+
+        <label>Buckets and paths to search</label>
+        <p class="muted">Add one row for each GCS bucket and optional path. The selected access profile controls which bucket/path roots are permitted.</p>
+        <div id="bucket-rows"></div>
+        <button class="secondary" id="add-bucket" type="button">+ Add bucket</button>
+
+        <label for="terms" id="terms-label">Terms to search inside files</label>
+        <textarea id="terms" required placeholder="One term per line, or comma-separated"></textarea>
+        <div id="term-mode-settings">
+          <label for="mode">Term mode</label>
+          <select id="mode"><option value="literal">Literal</option><option value="regex">Safe regex</option></select>
+          <p class="muted"><strong>Literal</strong> looks for the text exactly as entered, such as <code>PID</code>. <strong>Safe regex</strong> matches a pattern, such as <code>pid_\d+</code>. Groups, backreferences, and counted repetitions are intentionally disabled.</p>
+        </div>
+        <p class="muted" id="filename-help" hidden>Filename search checks the final component of every blob name, regardless of extension. A complete filename match is exact; a filename containing the entered text is partial.</p>
+
+        <div class="option"><input id="copy-enabled" type="checkbox"><label for="copy-enabled">Copy matches to an approved target</label></div>
+        <div id="copy-settings" hidden>
+          <label for="copy-bucket">Destination GCS bucket</label>
+          <input id="copy-bucket" type="text" placeholder="target-bucket">
+          <label for="copy-prefix">Destination path within bucket</label>
+          <input id="copy-prefix" type="text" placeholder="search-results/team-a/">
+          <p class="muted">The destination must stay within an approved copy bucket and path root. Each job writes beneath its own folder to avoid collisions.</p>
+        </div>
+        <label for="email-recipients">Email report to (optional)</label>
+        <input id="email-recipients" type="text" placeholder="name@your-org.com, teammate@your-org.com">
+        <p class="muted">Use commas or semicolons for up to five recipients. Delivery is limited to approved organization email domains.</p>
+
+        <button id="submit" type="submit">Run search</button>
+      </form>
+      <section id="result" aria-live="polite"><strong id="status"></strong><p id="detail"></p><a id="download" hidden>Download Excel report</a><p id="error"></p></section>
+    </main>
+    <script>
+      const state = { email: '', scopes: [] };
+      const scope = document.querySelector('#scope');
+      const searchType = document.querySelector('#search-type');
+      const bucketRows = document.querySelector('#bucket-rows');
+      const addBucket = document.querySelector('#add-bucket');
+      const copyEnabled = document.querySelector('#copy-enabled');
+      const copySettings = document.querySelector('#copy-settings');
+      const copyBucket = document.querySelector('#copy-bucket');
+      const copyPrefix = document.querySelector('#copy-prefix');
+      const result = document.querySelector('#result');
+      const statusText = document.querySelector('#status');
+      const detail = document.querySelector('#detail');
+      const error = document.querySelector('#error');
+      const download = document.querySelector('#download');
+      const submit = document.querySelector('#submit');
+
+      function updateSearchType() {
+        const filenameMode = searchType.value === 'filename';
+        document.querySelector('#terms-label').textContent = filenameMode ? 'File names to search for' : 'Terms to search inside files';
+        document.querySelector('#terms').placeholder = filenameMode ? 'One filename or partial filename per line' : 'One term per line, or comma-separated';
+        document.querySelector('#term-mode-settings').hidden = filenameMode;
+        document.querySelector('#filename-help').hidden = !filenameMode;
+      }
+
+      async function json(url, options) {
+        const response = await fetch(url, options);
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+        return body;
+      }
+      function selectedScope() { return state.scopes.find(item => item.scope_id === scope.value); }
+      function addBucketRow(source = {}) {
+        const row = document.createElement('div'); row.className = 'bucket-row';
+        const bucketLabel = document.createElement('label'); bucketLabel.textContent = 'GCS bucket';
+        const bucketInput = document.createElement('input'); bucketInput.className = 'bucket-name'; bucketInput.required = true; bucketInput.value = source.bucket || ''; bucketInput.placeholder = 'my-bucket';
+        bucketLabel.append(bucketInput);
+        const pathLabel = document.createElement('label'); pathLabel.textContent = 'Path within bucket (optional)';
+        const pathInput = document.createElement('input'); pathInput.className = 'bucket-prefix'; pathInput.value = source.prefix || ''; pathInput.placeholder = 'folder/subfolder/';
+        pathLabel.append(pathInput);
+        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
+        remove.addEventListener('click', () => row.remove());
+        row.append(bucketLabel, pathLabel, remove); bucketRows.append(row);
+      }
+      function resetBucketRows() {
+        bucketRows.replaceChildren();
+        const buckets = (selectedScope() || {}).buckets || [];
+        buckets.forEach(addBucketRow);
+        if (!buckets.length) addBucketRow();
+      }
+      function currentBucketPaths() {
+        return [...bucketRows.querySelectorAll('.bucket-row')].map(row => ({
+          bucket: row.querySelector('.bucket-name').value.trim(),
+          prefix: row.querySelector('.bucket-prefix').value.trim(),
+        })).filter(row => row.bucket || row.prefix);
+      }
+      function populateCopyTargets() {
+        const targets = (selectedScope() || {}).copy_targets || [];
+        copySettings.hidden = !copyEnabled.checked;
+        if (targets.length) {
+          copyBucket.value = targets[0].bucket || '';
+          copyPrefix.value = targets[0].prefix || '';
+        }
+      }
+      function show(message, text = '') {
+        result.style.display = 'block'; statusText.textContent = message; detail.textContent = text; error.textContent = ''; download.hidden = true;
+      }
+      async function poll(jobId) {
+        const job = await json(`/v1/jobs/${jobId}`);
+        show(`Job ${job.status}`, job.matches_found == null ? 'Working…' : `${job.matches_found} matching files found.`);
+        if (job.status === 'succeeded') {
+          const link = await json(`/v1/jobs/${jobId}/download`);
+          download.href = link.url; download.hidden = false; download.textContent = 'Download Excel report';
+          return;
+        }
+        if (job.status === 'failed' || job.status === 'cancelled') { error.textContent = job.error_message || 'The job did not complete.'; return; }
+        window.setTimeout(() => poll(jobId).catch(problem => { error.textContent = problem.message; }), 2500);
+      }
+      async function initialize() {
+        try {
+          const [me, scopes] = await Promise.all([json('/v1/me'), json('/v1/scopes')]);
+          state.email = me.email; state.scopes = scopes.scopes;
+          document.querySelector('#identity').textContent = `Signed in as ${state.email}`;
+          scope.replaceChildren();
+          state.scopes.forEach(item => { const option = document.createElement('option'); option.value = item.scope_id; option.textContent = item.scope_id; scope.append(option); });
+          resetBucketRows();
+          populateCopyTargets();
+          updateSearchType();
+        } catch (problem) {
+          document.querySelector('#identity').textContent = `Access unavailable: ${problem.message}`;
+          submit.disabled = true;
+        }
+      }
+      scope.addEventListener('change', () => { resetBucketRows(); populateCopyTargets(); });
+      searchType.addEventListener('change', updateSearchType);
+      copyEnabled.addEventListener('change', populateCopyTargets);
+      addBucket.addEventListener('click', () => addBucketRow());
+      document.querySelector('#search-form').addEventListener('submit', async event => {
+        event.preventDefault(); submit.disabled = true; show('Submitting search');
+        try {
+          const filenameMode = searchType.value === 'filename';
+          const mode = filenameMode ? 'literal' : document.querySelector('#mode').value;
+          const separator = filenameMode ? /\n/ : /[\n,]/;
+          const terms = document.querySelector('#terms').value.split(separator).map(value => value.trim()).filter(Boolean).map(value => ({ value, mode }));
+          const bucket_paths = currentBucketPaths();
+          if (!bucket_paths.length || bucket_paths.some(path => !path.bucket)) throw new Error('Enter at least one GCS bucket.');
+          const email_recipients = document.querySelector('#email-recipients').value.split(/[;,]/).map(value => value.trim()).filter(Boolean);
+          const payload = { scope_id: scope.value, search_type: searchType.value, bucket_paths, terms, email_recipients };
+          if (copyEnabled.checked) {
+            if (!copyBucket.value.trim()) throw new Error('Enter a destination GCS bucket for copy.');
+            payload.copy = { bucket: copyBucket.value.trim(), prefix: copyPrefix.value.trim(), overwrite: false };
+          }
+          const created = await json('/v1/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          show('Job queued', `Reference: ${created.job_id}`); await poll(created.job_id);
+        } catch (problem) { error.textContent = problem.message; statusText.textContent = 'Search was not submitted'; }
+        finally { submit.disabled = false; }
+      });
+      initialize();
+    </script>
+  </body>
+</html>

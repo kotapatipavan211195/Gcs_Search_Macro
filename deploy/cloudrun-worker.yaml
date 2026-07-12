@@ -1,0 +1,60 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: gcs-search-worker
+  annotations:
+    # Cloud Tasks calls this service with an OIDC token. It is not exposed via
+    # the browser-facing load balancer and Cloud Run IAM grants invoker only to
+    # the task dispatcher service account.
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "20"
+    spec:
+      serviceAccountName: gcs-search-worker@PROJECT_ID.iam.gserviceaccount.com
+      # One resource-intensive search per container initially; Cloud Run scales
+      # horizontally. Increase only after representative load testing.
+      containerConcurrency: 1
+      timeoutSeconds: 1800
+      containers:
+        - image: IMAGE_URI
+          command: ["sh", "-c", "uvicorn gcs_search_macro_v4.worker:app --host 0.0.0.0 --port ${PORT}"]
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          env:
+            - name: APP_ENV
+              value: production
+            - name: GOOGLE_CLOUD_PROJECT
+              value: PROJECT_ID
+            - name: GCS_SEARCH_REPORTS_BUCKET
+              value: REPORTS_BUCKET
+            - name: GCS_SEARCH_CACHE_DATASET
+              value: gcs_search_cache
+            - name: GCS_SEARCH_ALLOWED_EMAIL_DOMAINS
+              value: YOUR_ORG_DOMAIN
+            - name: GCS_SEARCH_SCOPE_POLICIES_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: gcs-search-scope-policies
+                  key: latest
+            # SMTP relay settings are needed only when email delivery is used.
+            - name: GCS_SEARCH_SMTP_HOST
+              value: SMTP_RELAY_HOST
+            - name: GCS_SEARCH_SMTP_PORT
+              value: "587"
+            - name: GCS_SEARCH_SMTP_USER
+              value: SMTP_RELAY_USER
+            - name: GCS_SEARCH_SMTP_FROM
+              value: gcs-search@YOUR_ORG_DOMAIN
+            - name: GCS_SEARCH_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gcs-search-smtp-password
+                  key: latest
