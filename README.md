@@ -1,6 +1,6 @@
 # GCS Search Macro
 
-Standalone production service for concurrent content and filename searches across approved GCS bucket paths. It provides a browser UI and API, asynchronous Cloud Tasks workers, owner-isolated job state, BigQuery result reuse, Excel downloads, optional organization email delivery, and controlled copying to approved GCS targets.
+Standalone production service for concurrent content and filename, and term searches across approved GCS bucket paths. It provides a browser UI and API, asynchronous Cloud Tasks workers, owner-isolated job state, BigQuery result reuse, Excel downloads, optional organization email delivery, and controlled copying to approved GCS targets.
 
 This directory is a complete build context. It does not import, install, mount, or read code or data from another application version.
 
