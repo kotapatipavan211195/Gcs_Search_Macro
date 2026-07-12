@@ -23,8 +23,7 @@ This document is the full guide to the project: what it is, the business problem
 13. [Production Deployment on GCP](#13-production-deployment-on-gcp)
 14. [Security Model](#14-security-model)
 15. [Operational Limits](#15-operational-limits)
-16. [Running the Tests](#16-running-the-tests)
-17. [Troubleshooting](#17-troubleshooting)
+16. [Troubleshooting](#16-troubleshooting)
 
 ---
 
@@ -186,7 +185,6 @@ HTTPS Load Balancer + Cloud Armor + IAP (user/group IAM)
 │   ├── settings.py              # Typed environment configuration
 │   ├── models.py                # Pydantic API/persistence models
 │   └── static/index.html        # Hosted browser UI (no build step)
-├── tests/                       # Pytest suite (fully mocked, no GCP needed)
 ├── deploy/                      # Cloud Run manifests + hardened deploy guide
 │   ├── cloudrun-api.yaml
 │   ├── cloudrun-worker.yaml
@@ -211,8 +209,6 @@ HTTPS Load Balancer + Cloud Armor + IAP (user/group IAM)
   ```bash
   gcloud auth application-default login
   ```
-
-  Running the test suite requires **no** GCP credentials — everything is mocked.
 
 ### For a working deployment (and for end-to-end local runs)
 
@@ -245,7 +241,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e '.[dev]'
 ```
 
-This installs FastAPI, Uvicorn, Pydantic, the Google Cloud client libraries (Firestore, BigQuery, Storage, Tasks), pandas, and openpyxl, plus pytest/httpx for testing.
+This installs FastAPI, Uvicorn, Pydantic, the Google Cloud client libraries (Firestore, BigQuery, Storage, Tasks), pandas, and openpyxl, plus development tooling (httpx, pytest).
 
 ### Step 3 — Configure the environment
 
@@ -585,21 +581,7 @@ Jobs exceeding a limit fail with a clear message rather than degrading the servi
 
 ---
 
-## 16. Running the Tests
-
-The suite is fully mocked — no GCP credentials, network, or emulators required:
-
-```bash
-pip install -e '.[dev]'
-python -m pytest            # all tests
-python -m pytest tests/test_policy.py -v      # one module
-```
-
-Coverage includes API authorization and ownership behavior, policy validation (roots, regex safety, recipients, copy targets), search-engine classification, cache diffing/merging, job-store transitions, and report generation.
-
----
-
-## 17. Troubleshooting
+## 16. Troubleshooting
 
 | Symptom | Likely cause & fix |
 |---|---|
