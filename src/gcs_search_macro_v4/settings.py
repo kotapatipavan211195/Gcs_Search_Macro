@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     worker_url: str = Field(default="", validation_alias="GCS_SEARCH_WORKER_URL")
     task_service_account: str = Field(default="", validation_alias="GCS_SEARCH_TASK_SERVICE_ACCOUNT")
     allowed_email_domains: str = Field(default="", validation_alias="GCS_SEARCH_ALLOWED_EMAIL_DOMAINS")
-    max_terms: int = Field(default=20, ge=1, le=100, validation_alias="GCS_SEARCH_MAX_TERMS")
+    max_terms: int = Field(default=200, ge=1, le=1000, validation_alias="GCS_SEARCH_MAX_TERMS")
     max_bucket_paths: int = Field(default=20, ge=1, le=100, validation_alias="GCS_SEARCH_MAX_BUCKET_PATHS")
     max_term_length: int = Field(default=200, ge=1, le=1000, validation_alias="GCS_SEARCH_MAX_TERM_LENGTH")
     max_files_per_job: int = Field(default=100_000, ge=1, validation_alias="GCS_SEARCH_MAX_FILES_PER_JOB")

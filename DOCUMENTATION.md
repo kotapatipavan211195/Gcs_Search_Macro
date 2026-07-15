@@ -337,7 +337,7 @@ All configuration is environment-driven (or `.env` in development) and validated
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GCS_SEARCH_MAX_TERMS` | `20` | Maximum search terms per job |
+| `GCS_SEARCH_MAX_TERMS` | `200` | Maximum search terms per job |
 | `GCS_SEARCH_MAX_TERM_LENGTH` | `200` | Maximum characters per term |
 | `GCS_SEARCH_MAX_BUCKET_PATHS` | `20` | Maximum bucket/path rows per job |
 | `GCS_SEARCH_MAX_FILES_PER_JOB` | `100000` | Manifest cap; exceeding it fails the job fast |

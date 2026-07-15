@@ -233,19 +233,19 @@ class SearchEngine:
     ) -> dict[str, list[dict]]:
         """Classify case-insensitive basename equality or containment."""
         results = {term.value: [] for term in terms}
+        folded_terms = [(term.value, term.value.casefold()) for term in terms]
         result_rows = 0
         for entry in manifest:
             file_name = entry.script_path.rsplit("/", 1)[-1]
             folded_name = file_name.casefold()
-            for term in terms:
-                folded_term = term.value.casefold()
+            for term_value, folded_term in folded_terms:
                 if folded_name == folded_term:
                     match_type = "exact"
                 elif folded_term in folded_name:
                     match_type = "partial"
                 else:
                     continue
-                results[term.value].append({
+                results[term_value].append({
                     "bucket": entry.bucket,
                     "file_path": entry.script_path,
                     "file_name": file_name,
